@@ -1,5 +1,8 @@
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut
 
 # 1) Read your CSV file (with exactly these four column headers):
 #    "Organization Name,Customer Type,State,Org Specialty"
@@ -14,6 +17,28 @@ df = (
     .explode("State")
     .reset_index(drop=True)
 )
+
+# Initialize geocoder
+geolocator = Nominatim(user_agent="my_customer_map")
+
+# Function to get coordinates
+def get_coordinates(city, state):
+    try:
+        location = geolocator.geocode(f"{city}, {state}, USA")
+        if location:
+            return location.latitude, location.longitude
+        return None, None
+    except GeocoderTimedOut:
+        return None, None
+
+# Add coordinates to your dataframe
+df['latitude'] = None
+df['longitude'] = None
+
+for idx, row in df.iterrows():
+    lat, lon = get_coordinates(row['City'], row['State'])
+    df.at[idx, 'latitude'] = lat
+    df.at[idx, 'longitude'] = lon
 
 # 3) Define a helper that takes one group (all rows for a given state)
 #    and returns a Series with:
@@ -59,6 +84,22 @@ fig = px.choropleth(
     color_continuous_scale="Viridis",
     title="Customer Map by State (hover to see all orgs)"
 )
+
+# 6) Add city markers
+# You'll need to add latitude and longitude for each city
+# You can use a geocoding service or add these columns to your CSV
+fig.add_trace(go.Scattergeo(
+    lon=df['longitude'],  # Add this column to your CSV
+    lat=df['latitude'],   # Add this column to your CSV
+    text=df['City'],      # Your city column
+    mode='markers',
+    marker=dict(
+        size=8,
+        color='red',
+        opacity=0.7
+    ),
+    name='Cities'
+))
 
 fig.update_layout(
     title_x=0.5,
